@@ -1,13 +1,19 @@
 # 导入所需的库
 import os
-import spacy
-from langchain.document_loaders import (
-    PyPDFLoader,           # 用于加载 PDF 文件
-    TextLoader,             # 用于加载 TXT 文件
-    UnstructuredWordDocumentLoader,  # 用于加载 Word 文档 (.docx)
-    UnstructuredMarkdownLoader      #用于加载markdown文件(.md)
-)
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+try:
+    from langchain_community.document_loaders import (
+        PyPDFLoader,  # 用于加载 PDF 文件
+        TextLoader,  # 用于加载 TXT 文件
+        UnstructuredWordDocumentLoader,  # 用于加载 Word 文档 (.docx)
+        UnstructuredMarkdownLoader,  # 用于加载 Markdown 文件 (.md)
+    )
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+except ModuleNotFoundError as exc:
+    raise ModuleNotFoundError(
+        "缺少文档加载依赖。请在 Python 3.11/3.12 环境中执行 "
+        "`python -m pip install -r requirements.txt`。"
+    ) from exc
 
 def load_document(file_path):
     """

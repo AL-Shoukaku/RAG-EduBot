@@ -1,0 +1,7 @@
+key.txt
+.venv/
+__pycache__/
+knowledge/
+vector_db*.json
+.tmp/
+pdf

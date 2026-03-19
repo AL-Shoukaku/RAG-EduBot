@@ -1,0 +1,9 @@
+streamlit
+numpy
+faiss-cpu
+pypdf
+unstructured
+python-docx
+langchain-community
+langchain-text-splitters
+zai-sdk

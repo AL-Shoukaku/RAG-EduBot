@@ -34,7 +34,7 @@ def get_most_similar_text(question: str, vector_db: list):
     response = client.embeddings.create(
         model="embedding-3",
         input=[question],
-        dimensions=512
+        dimensions=256
     )
     question_vector = response.data[0].embedding
     
