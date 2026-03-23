@@ -2,6 +2,7 @@ streamlit
 numpy
 faiss-cpu
 pypdf
+markdown
 unstructured
 python-docx
 langchain-community

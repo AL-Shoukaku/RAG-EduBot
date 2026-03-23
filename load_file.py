@@ -1,4 +1,5 @@
 # 导入所需的库
+import importlib.util
 import os
 
 try:
@@ -15,22 +16,30 @@ except ModuleNotFoundError as exc:
         "`python -m pip install -r requirements.txt`。"
     ) from exc
 
+
+def _get_markdown_loader(file_path):
+    """优先使用 Markdown 专用加载器，缺少依赖时回退到纯文本读取。"""
+    if importlib.util.find_spec("markdown") is None:
+        print(f"未安装 markdown 依赖，按纯文本方式加载 Markdown: {file_path}")
+        return TextLoader(file_path, encoding="utf-8", autodetect_encoding=True)
+    return UnstructuredMarkdownLoader(file_path)
+
 def load_document(file_path):
     """
     根据文件扩展名选择合适的加载器，返回 Document 对象列表。
-    支持 .pdf, .txt, .docx 格式，可根据需要扩展。
+    支持 .pdf, .txt, .docx, .md, .markdown 格式，可根据需要扩展。
     """
     ext = os.path.splitext(file_path)[1].lower()
     if ext == '.pdf':
         loader = PyPDFLoader(file_path)
     elif ext == '.txt':
         # 指定编码为 utf-8，避免中文乱码
-        loader = TextLoader(file_path, encoding='utf-8')
+        loader = TextLoader(file_path, encoding='utf-8', autodetect_encoding=True)
     elif ext in ['.docx', '.doc']:
         loader = UnstructuredWordDocumentLoader(file_path)
-     # !!! 增加对 .md 和 .markdown 文件的支持
+    # 优先使用 Markdown 专用解析，缺少依赖时自动回退到纯文本读取
     elif ext in ['.md', '.markdown']:
-        loader = UnstructuredMarkdownLoader(file_path)
+        loader = _get_markdown_loader(file_path)
     else:
         # 不支持的文件格式，返回空列表或抛出警告
         print(f"跳过不支持的文件格式: {file_path}")

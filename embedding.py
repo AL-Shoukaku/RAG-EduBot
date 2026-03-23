@@ -34,7 +34,7 @@ for i in range(0, len(texts), batch_size):
     response = client.embeddings.create(
         model="embedding-3",
         input=batch_texts,
-        dimensions=256
+        dimensions=512
     )
 
     # 4. 构建向量库（向量 + 对应文本）
