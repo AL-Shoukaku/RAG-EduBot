@@ -1,5 +1,4 @@
 # 导入所需的库
-import importlib.util
 import os
 
 try:
@@ -7,7 +6,6 @@ try:
         PyPDFLoader,  # 用于加载 PDF 文件
         TextLoader,  # 用于加载 TXT 文件
         UnstructuredWordDocumentLoader,  # 用于加载 Word 文档 (.docx)
-        UnstructuredMarkdownLoader,  # 用于加载 Markdown 文件 (.md)
     )
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 except ModuleNotFoundError as exc:
@@ -15,14 +13,6 @@ except ModuleNotFoundError as exc:
         "缺少文档加载依赖。请在 Python 3.11/3.12 环境中执行 "
         "`python -m pip install -r requirements.txt`。"
     ) from exc
-
-
-def _get_markdown_loader(file_path):
-    """优先使用 Markdown 专用加载器，缺少依赖时回退到纯文本读取。"""
-    if importlib.util.find_spec("markdown") is None:
-        print(f"未安装 markdown 依赖，按纯文本方式加载 Markdown: {file_path}")
-        return TextLoader(file_path, encoding="utf-8", autodetect_encoding=True)
-    return UnstructuredMarkdownLoader(file_path)
 
 def load_document(file_path):
     """
@@ -39,7 +29,7 @@ def load_document(file_path):
         loader = UnstructuredWordDocumentLoader(file_path)
     # 优先使用 Markdown 专用解析，缺少依赖时自动回退到纯文本读取
     elif ext in ['.md', '.markdown']:
-        loader = _get_markdown_loader(file_path)
+        loader = TextLoader(file_path, encoding="utf-8", autodetect_encoding=True)  #markdown文件也用textloader加载
     else:
         # 不支持的文件格式，返回空列表或抛出警告
         print(f"跳过不支持的文件格式: {file_path}")
@@ -93,10 +83,14 @@ def load_and_split_docs_from_folder(folder_path, chunk_size=500, chunk_overlap=5
         chunk_overlap=chunk_overlap,
         length_function=len,
         separators=[
-            "#",
-            "\n\n",
-            "\n",
-            ""
+            "\n# ",          # 1. 优先从一级标题处切分（注意#后面有空格，更精准）
+            "\n\n",          # 5. 降低换行的优先级
+            "\n",            # 6. 单换行作为较后的选择
+            "。",            # 2. 核心：如果换行乱，就靠句号来保证语义完整
+            "！",            # 3. 感叹号
+            "？",            # 4. 问号
+            " ",             # 7. 空格
+            ""               # 8. 最后手段
         ]
     )
     
@@ -105,7 +99,7 @@ def load_and_split_docs_from_folder(folder_path, chunk_size=500, chunk_overlap=5
     print(f"分块完成，共生成 {len(chunks)} 个文本块。")
     
     # 可选：打印前几个块作为预览
-    for i, chunk in enumerate(chunks[20:30]):  # 只打印第21-30个块作为示例
+    for i, chunk in enumerate(chunks[0:10]):  # 只打印第1-10个块作为示例
         print(f"\n--- 全局块 {i+1} ---")
         print(f"元数据: {chunk.metadata}")
         print(f"内容预览: {chunk.page_content[:150]}...")
