@@ -39,7 +39,7 @@ def get_most_similar_text(question: str, vector_db: list):
     question_vector = response.data[0].embedding
     
     # ! 使用 faiss 进行相似度计算
-    threshold = 0.65    #相似度超过这个值才认为是相关的文本
+    threshold = 0.70    #相似度超过这个值才认为是相关的文本 #要改这个！！！！！！！！！！！！！！！！！！！！！！！！！！
     candidates = []
     
     # ! 如果向量库不为空，使用 faiss 进行批量相似度计算

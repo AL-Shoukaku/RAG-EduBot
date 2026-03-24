@@ -63,28 +63,33 @@ class RAGChatAPI:
         }
     
     def build_enhanced_prompt(self, user_input: str, combined_text: str) -> str:
-        """构建增强提示词（完全保留原逻辑）"""
-        enhanced_prompt = f"""
-        知识库的信息可供参考，以下是与用户问题相关的文本：
+        """构建增强提示词（结构化指令优化版）"""
+        enhanced_prompt = f"""你是一个严谨的高校计算机课程教学助手。请仔细阅读以下的<参考知识>，并基于它回答用户问题。
 
-        知识库相关信息：
-        {combined_text}
+<参考知识>
+{combined_text}
+</参考知识>
 
-        用户问题：
-        {user_input}
+回答要求：
+1. 若<参考知识>中包含相关信息，请严格基于知识作答，切勿捏造，并在回答末尾附上引用的知识库原文作为补充。
+2. 若<参考知识>显示“知识库中没有与问题相关的内容”，请先明确告知用户“知识库中缺乏直接信息”，随后基于你的计算机科学公共知识库给出严谨的解答。
+3. 解释专业概念时（如进程、缓存等），请保持条理清晰，多用列表形式。
 
-        如果用户问题与知识库信息相关，请基于知识库的内容做出回答，可以做适当拓展，在回答的最后可以输出知识库中的原文作为补充；如果知识库与用户问题不相关，请在开头指出知识库中缺乏相关信息，然后基于公共知识进行回答。"""
+用户问题：
+{user_input}"""
         
         return enhanced_prompt
     
     def stream_chat(self, messages: List[Dict], **kwargs) -> Generator:
-        """流式聊天（完全保留原调用逻辑）"""
+        """流式聊天（大模型参数优化版）"""
         return self.client.chat.completions.create(
             model="glm-4-flash",
             messages=messages,
-            temperature=0.5,
-            max_tokens=5000,
+            temperature=0.1,      # 【修改】：降温至 0.1。大幅度减少“幻觉”，让回答更稳定、更像标准答案
+            top_p=0.7,            # 【新增】：控制核采样，进一步限制模型乱发散
+            max_tokens=2000,      # 【修改】：降至 2000。答疑通常不需要 5000 字长篇大论，这能加快系统响应速度
             stream=True,
             timeout=30,
             **kwargs
         )
+        
