@@ -62,12 +62,6 @@ def load_and_split_docs_from_folder(folder_path, chunk_size=500, chunk_overlap=5
         
         # 加载单个文件
         docs = load_document(file_path)
-        
-        # 为当前文件的所有文档添加来源标记
-        source_info = f"【来源文件：{filename}】\n"
-        for doc in docs:
-            # 在文档内容开头添加来源信息
-            doc.page_content = source_info + doc.page_content
             
         all_documents.extend(docs)
     

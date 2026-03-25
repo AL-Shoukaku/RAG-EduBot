@@ -4,14 +4,21 @@
 from pathlib import Path
 from typing import List, Dict, Union, Generator
 from zai import ZhipuAiClient
-from RAG import get_most_similar_text, load_vector_db
+# !!! 移除了 load_vector_db 的导入，因为我们直接在这里读取文件
+from RAG import get_most_similar_text
+# !!! 新增导入 json 和 faiss
+import json
+import faiss
 
 class RAGChatAPI:
     """封装原有代码中的所有API和RAG功能"""
     
     def __init__(self):
         """初始化客户端（对应原代码中的初始化逻辑）"""
-        self.vector_db = None  # 动态加载的知识库
+        # !!! 将原本单一的 vector_db 拆分为 texts 和 faiss_index 两个独立的状态
+        self.texts = None         # 用于存储纯文本列表
+        self.faiss_index = None   # 用于存储预编译的 Faiss 引擎
+        
         try:
             path = Path("key.txt")
             if not path.exists():
@@ -26,12 +33,26 @@ class RAGChatAPI:
             
     def load_course_db(self, course_type: str):
         """根据选择的课程加载对应的知识库"""
-        if course_type == "os":
-            self.vector_db = load_vector_db("vector_db_os.json")
-        elif course_type == "co":
-            self.vector_db = load_vector_db("vector_db_co.json")
-        else:
-            raise ValueError("未知的课程类型")
+        # !!! 修改加载逻辑：分别为 OS 和 CO 加载对应的文本和 Faiss 索引文件
+        try:
+            if course_type == "os":
+                # 加载纯文本
+                with open("texts_os.json", "r", encoding="utf-8") as f:
+                    self.texts = json.load(f)
+                # 加载 Faiss 二进制索引引擎
+                self.faiss_index = faiss.read_index("vector_db_os.index")
+                
+            elif course_type == "co":
+                # 加载纯文本
+                with open("texts_co.json", "r", encoding="utf-8") as f:
+                    self.texts = json.load(f)
+                # 加载 Faiss 二进制索引引擎
+                self.faiss_index = faiss.read_index("vector_db_co.index")
+                
+            else:
+                raise ValueError("未知的课程类型")
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"加载知识库失败：找不到对应的文件。请先运行 embedding.py 编译知识库！详细信息：{e}")
     
     def check_initialized(self):
         """检查是否初始化成功"""
@@ -40,9 +61,12 @@ class RAGChatAPI:
     
     def retrieve_similar_text(self, query: str) -> Union[str, List[str]]:
         """执行RAG检索，传入动态加载的知识库"""
-        if not self.vector_db:
+        # !!! 检查两个组件是否都已成功加载
+        if not self.texts or not self.faiss_index:
             raise RuntimeError("知识库尚未加载，请先选择课程！")
-        return get_most_similar_text(query, self.vector_db)
+        
+        # !!! 将 faiss_index 和 texts 一起传递给 RAG.py 里的检索函数
+        return get_most_similar_text(query, self.faiss_index, self.texts)
     
     def prepare_rag_result(self, similar_text: Union[str, List[str]]) -> dict:
         """准备RAG检索结果（完全保留原逻辑）"""
@@ -66,30 +90,33 @@ class RAGChatAPI:
         """构建增强提示词（结构化指令优化版）"""
         enhanced_prompt = f"""你是一个严谨的高校计算机课程教学助手。请仔细阅读以下的<参考知识>，并基于它回答用户问题。
 
-<参考知识>
-{combined_text}
-</参考知识>
+        <参考知识>
+        {combined_text}
+        </参考知识>
 
-回答要求：
-1. 若<参考知识>中包含相关信息，请严格基于知识作答，切勿捏造，并在回答末尾附上引用的知识库原文作为补充。
-2. 若<参考知识>显示“知识库中没有与问题相关的内容”，请先明确告知用户“知识库中缺乏直接信息”，随后基于你的计算机科学公共知识库给出严谨的解答。
-3. 解释专业概念时（如进程、缓存等），请保持条理清晰，多用列表形式。
+        【严格回答规则】
+        1. 强制相关性检查：在回答前，请先仔细比对用户问题与<参考知识>的内容。
+        2. 触发拒答的条件：
+        - 如果<参考知识>显示为“知识库中没有与问题相关的内容”。
+        - 或者你判断<参考知识>中的内容与用户问题几乎无关、无法支撑给出一个完整且正确的答案。
+        满足以上任一条件时，你**绝对不能**动用你自己的公共知识库进行瞎编或扩充，必须直接输出标准的拒答话术：“**抱歉，目前的课程知识库中未检索到与您问题直接相关的内容。您可以尝试换个问法，或者查阅最新的课程课件。**”
+        3. 标准作答要求：如果<参考知识>包含相关答案，请进行提炼和总结。解释专业概念时条理清晰，多用列表形式。
+        4. 来源引用：在作答完毕后，必须在回答的末尾加上一段话：“*(参考来源：[此处填入参考知识中出现的【来源文件：xxx】名称])*”。
 
-用户问题：
-{user_input}"""
+        用户问题：
+        {user_input}"""
         
         return enhanced_prompt
     
     def stream_chat(self, messages: List[Dict], **kwargs) -> Generator:
-        """流式聊天（大模型参数优化版）"""
+        """流式聊天（完全保留原逻辑）"""
         return self.client.chat.completions.create(
             model="glm-4-flash",
             messages=messages,
-            temperature=0.1,      # 【修改】：降温至 0.1。大幅度减少“幻觉”，让回答更稳定、更像标准答案
-            top_p=0.7,            # 【新增】：控制核采样，进一步限制模型乱发散
-            max_tokens=2000,      # 【修改】：降至 2000。答疑通常不需要 5000 字长篇大论，这能加快系统响应速度
+            temperature=0.1,      
+            top_p=0.7,            
+            max_tokens=2000,      
             stream=True,
             timeout=30,
             **kwargs
         )
-        
