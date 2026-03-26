@@ -37,17 +37,17 @@ class RAGChatAPI:
         try:
             if course_type == "os":
                 # 加载纯文本
-                with open("texts_os.json", "r", encoding="utf-8") as f:
+                with open("knowledge/texts_os.json", "r", encoding="utf-8") as f:
                     self.texts = json.load(f)
                 # 加载 Faiss 二进制索引引擎
-                self.faiss_index = faiss.read_index("vector_db_os.index")
+                self.faiss_index = faiss.read_index("knowledge/vector_db_os.index")
                 
             elif course_type == "co":
                 # 加载纯文本
-                with open("texts_co.json", "r", encoding="utf-8") as f:
+                with open("knowledge/texts_co.json", "r", encoding="utf-8") as f:
                     self.texts = json.load(f)
                 # 加载 Faiss 二进制索引引擎
-                self.faiss_index = faiss.read_index("vector_db_co.index")
+                self.faiss_index = faiss.read_index("knowledge/vector_db_co.index")
                 
             else:
                 raise ValueError("未知的课程类型")
