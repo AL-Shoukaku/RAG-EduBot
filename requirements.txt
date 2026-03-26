@@ -8,3 +8,5 @@ python-docx
 langchain-community
 langchain-text-splitters
 zai-sdk
+pywebview
+pyperclip
