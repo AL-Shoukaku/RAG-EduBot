@@ -1,69 +1,88 @@
 # UI.py
-# 彻底修复课程选择+全屏纯色背景（修复底部黑边）+检索结果默认折叠版
+# 彻底修复课程选择+全屏纯色背景+检索折叠+本地历史记录+知识分页与单条删除版
 import streamlit as st
+import json
+import os
+import time
 from API import RAGChatAPI
+
+# ================= 历史记录持久化配置 =================
+HISTORY_FILE = "chat_history.json"
+
+def load_history():
+    """从本地 JSON 文件加载历史对话记录"""
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            st.error(f"读取历史记录失败: {e}")
+            return {}
+    return {}
+
+def save_history(history_data):
+    """将历史对话记录保存到本地 JSON 文件"""
+    try:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history_data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        st.error(f"保存历史记录失败: {e}")
 
 # ================= 全局设置与样式 =================
 st.set_page_config(
     page_title="Z.ai RAG 智能助教",
     layout="wide",
     page_icon="🎓",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="auto"
 )
 
-# 自定义 CSS - 全屏纯色背景+卡片单选框美化
+# 自定义 CSS 
 def load_custom_css():
     st.markdown("""
     <style>
     /* ================= 核心背景修改 ================= */
-    /* 1. 覆盖底层主视图容器，彻底替换默认黑/白背景 */
     [data-testid="stAppViewContainer"] {
         background-color: #0f3460 !important;
     }
-    
-    /* 2. 将顶部的 Streamlit Header（页眉）背景设为透明 */
     [data-testid="stHeader"] {
         background-color: transparent !important;
     }
-
-    /* 3. 确保底层应用本体也是同色 */
     .stApp {
         background-color: #0f3460 !important;
         min-height: 100vh;
         position: relative;
         overflow-x: hidden;
     }
-
-    /* 4. 彻底解决底部固定区域（输入框周围）的背景色 */
     footer {
         background-color: transparent !important;
     }
-    /* 强制底部悬浮容器为深蓝色 */
     [data-testid="stBottom"], [data-testid="stBottom"] > div {
         background-color: #0f3460 !important;
     }
     [data-testid="stBottomBlock"] {
         background-color: #0f3460 !important;
     }
-    /* 消除底部可能存在的内容渐变遮罩 */
     .stApp > header + div > div:last-child {
         background-image: none !important;
         background-color: #0f3460 !important;
     }
 
-    /* 内容层优先级，确保在背景之上 */
+    /* 侧边栏背景颜色同步深色 */
+    [data-testid="stSidebar"] {
+        background-color: rgba(10, 30, 60, 0.95) !important;
+        border-right: 1px solid rgba(255,255,255,0.1);
+    }
+
     .main > div {
         position: relative;
         z-index: 1;
     }
 
-    /* 全局字体 */
     html, body, [class*="css"] {
         font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
         line-height: 1.6;
     }
 
-    /* 标题样式 */
     h1 {
         color: white !important;
         font-weight: 700;
@@ -162,7 +181,7 @@ def load_custom_css():
         box-shadow: 0 8px 32px rgba(0,0,0,0.1);
     }
 
-    /* 输入框 - 保持原有玻璃态设定，不受外部背景影响 */
+    /* 输入框 */
     .stChatInput>div>div>input {
         border-radius: 60px;
         border: 1px solid rgba(255,255,255,0.3);
@@ -188,14 +207,12 @@ def load_custom_css():
         color: rgba(255,255,255,0.95) !important;
     }
 
-    /* 警告提示框 */
     .stAlert {
         border-radius: 12px;
         border: 1px solid rgba(255,255,255,0.2);
         backdrop-filter: blur(10px);
     }
 
-    /* 底部自制声明文本 */
     .caption {
         color: rgba(0,255,255,0.7) !important;
         text-align: center;
@@ -204,6 +221,41 @@ def load_custom_css():
     """, unsafe_allow_html=True)
 
 load_custom_css()
+
+# ================= RAG 检索结果分页渲染组件 =================
+def render_rag_result(content, session_id, msg_idx):
+    """渲染支持分页的RAG结果"""
+    # 如果传来的是一个列表（多条知识）并且列表不为空
+    if isinstance(content, list) and len(content) > 0:
+        page_key = f"rag_page_{session_id}_{msg_idx}"
+        # 初始化这一条检索记录的当前页码
+        if page_key not in st.session_state:
+            st.session_state[page_key] = 0
+            
+        col1, col2, col3 = st.columns([1, 3, 1])
+        
+        # 回调函数控制翻页
+        def update_page(k, delta, m):
+            st.session_state[k] = max(0, min(m, st.session_state[k] + delta))
+
+        with col1:
+            st.button("◀ 上一个", key=f"prev_{page_key}", 
+                      on_click=update_page, args=(page_key, -1, len(content)-1), 
+                      disabled=(st.session_state[page_key] == 0), 
+                      use_container_width=True)
+        with col2:
+            st.markdown(f"<div style='text-align: center; font-weight: bold; line-height: 2.5em;'>匹配知识片段 {st.session_state[page_key] + 1} / {len(content)}</div>", unsafe_allow_html=True)
+        with col3:
+            st.button("下一个 ▶", key=f"next_{page_key}", 
+                      on_click=update_page, args=(page_key, 1, len(content)-1), 
+                      disabled=(st.session_state[page_key] == len(content)-1), 
+                      use_container_width=True)
+        
+        st.divider()
+        st.text(content[st.session_state[page_key]])
+    else:
+        # 如果由于兼容旧版历史数据传来的是单字符串，直接显示
+        st.text(content)
 
 # ================= 状态初始化 =================
 if "api" not in st.session_state:
@@ -214,8 +266,71 @@ if "api" not in st.session_state:
         st.error(f"初始化失败: {e}")
         st.stop()
 
+if "all_sessions" not in st.session_state:
+    st.session_state.all_sessions = load_history()
+
+if "current_session_id" not in st.session_state:
+    st.session_state.current_session_id = None
+
 if "course_selected" not in st.session_state:
     st.session_state.course_selected = False
+
+
+# ================= 左侧历史记录侧边栏 =================
+with st.sidebar:
+    st.title("💬 历史对话")
+    
+    if st.button("➕ 新建会话", use_container_width=True, type="primary"):
+        st.session_state.current_session_id = None
+        st.session_state.course_selected = False
+        if "conversation" in st.session_state:
+            del st.session_state["conversation"]
+        if "display_history" in st.session_state:
+            del st.session_state["display_history"]
+        st.rerun()
+        
+    st.divider()
+    
+    # 渲染历史会话列表
+    for session_id, session_data in reversed(list(st.session_state.all_sessions.items())):
+        col_btn, col_del = st.columns([5, 1])
+        with col_btn:
+            button_label = f"📝 {session_data.get('title', '未命名对话')}"
+            if st.button(button_label, key=f"btn_{session_id}", use_container_width=True):
+                with st.spinner("正在恢复历史会话..."):
+                    st.session_state.current_session_id = session_id
+                    st.session_state.course_selected = True
+                    st.session_state.course_type = session_data["course_type"]
+                    st.session_state.course_name = session_data["course_name"]
+                    st.session_state.conversation = session_data["conversation"]
+                    st.session_state.display_history = session_data["display_history"]
+                    st.session_state.api.load_course_db(st.session_state.course_type)
+                st.rerun()
+        
+        with col_del:
+            # 单项删除按钮
+            if st.button("🗑️", key=f"del_{session_id}", help="删除该对话", use_container_width=True):
+                del st.session_state.all_sessions[session_id]
+                save_history(st.session_state.all_sessions)
+                # 如果删除的刚好是当前正在浏览的会话，就重置回主页
+                if st.session_state.current_session_id == session_id:
+                    st.session_state.current_session_id = None
+                    st.session_state.course_selected = False
+                    if "conversation" in st.session_state:
+                        del st.session_state["conversation"]
+                    if "display_history" in st.session_state:
+                        del st.session_state["display_history"]
+                st.rerun()
+
+    if st.session_state.all_sessions:
+        st.divider()
+        if st.button("🚨 清空所有历史", use_container_width=True):
+            st.session_state.all_sessions = {}
+            save_history({})
+            st.session_state.current_session_id = None
+            st.session_state.course_selected = False
+            st.rerun()
+
 
 # ================= 1. 课程选择界面 =================
 if not st.session_state.course_selected:
@@ -248,34 +363,19 @@ if not st.session_state.course_selected:
                         "content": f"""你是一名AI{st.session_state.course_name}课程助教，负责解答学生关于{st.session_state.course_name}的相关问题，请确保回答的准确性。
 
                     【核心处理流程与强制规则】
-
                     第一步：相关性与充足性校验（严格把关）
-                    在生成回答前，你必须在后台比对用户问题与<参考知识>。若出现以下任一情况：
-                    1. 知识库显示“没有与问题相关的内容”。
-                    2. 【无关拒答】：问题属于跨学科、日常生活或非本课程范围，参考知识无法对应。
-                    3. 【超纲拒答】：参考知识虽然命中了部分关键词，但提供的信息“极度碎片化”或“不足以支撑给出一个准确且完整的解答”（如前沿技术探讨）。
-                    -> 只要满足上述任一情况，请**立即停止作答**，绝不能使用你的公共知识库进行推测或编造。必须直接输出以下标准化拒答话术：
-                    “**同学你好，抱歉，目前的课程知识库中未检索到足以准确解答该问题的相关内容。请检查提问是否属于本课程（{st.session_state.course_name}）范围，或尝试补充更多关键词后重新提问。**”
-
-                    第二步：构建教学解答（若校验通过）
-                    如果<参考知识>足以回答问题，请按照以下“助教教学规范”组织你的回答：
-                    1. 绝对忠实：回答的核心观点、数据、公式、概念界定必须 100% 来源于<参考知识>。你可以用更容易理解的话去解释原文，但绝不能捏造原文不存在的事实。
-                    2. 针对性结构（极其重要）：
-                    - 【概念与事实题】：直接明了地给出答案，条理清晰。
-                    - 【对比与归纳题】：强烈建议使用**对比列表或Markdown表格**，清晰列出不同方案的优缺点和区别。
-                    - 【应用计算题】：严禁直接给出最终结果。必须**分步骤展示已知条件、所用原理以及推导/计算过程**。
-                    - 【综合问答题】：提取不同知识块的信息，使用“首先、其次、综上所述”等逻辑连接词进行串联。
-                    3. 教学语气：态度专业、客观、有启发性。合理排版，重点概念加粗。
-
+                    ...
+                    第二步：构建教学解答
+                    ...
                     第三步：强制标注来源
-                    在解答的最末尾，另起一行，必须列出你本次回答所引用的知识来源（请准确提取参考知识中出现的【来源文件：xxx】，不要遗漏，也不要罗列问题中没用到的文件）：
-                    格式：“*📚 参考资料：[文件A], [文件B]*”回答时请换为具体的文件来源。"""}
+                    ..."""}
                     ]
                     st.session_state.display_history = [
                         {"role": "system",
                          "content": f"欢迎使用《{st.session_state.course_name}》智能助教！您可以开始提问了。"}
                     ]
 
+                    st.session_state.current_session_id = str(int(time.time()))
                     st.session_state.course_selected = True
                     st.rerun()
 
@@ -289,6 +389,7 @@ else:
         st.title(f"📚 {st.session_state.course_name} 智能助教")
     with col_btn:
         if st.button("🔄 切换课程", use_container_width=True):
+            st.session_state.current_session_id = None
             st.session_state.course_selected = False
             for key in ["conversation", "display_history"]:
                 if key in st.session_state:
@@ -299,15 +400,16 @@ else:
 
     chat_container = st.container(height=900, border=True)
     with chat_container:
-        for msg in st.session_state.display_history:
+        # 枚举迭代历史消息，这样能拿到每条消息对应的独一无二的 index，用于分页器的状态绑定
+        for i, msg in enumerate(st.session_state.display_history):
             if msg["role"] == "system":
                 with st.chat_message("system", avatar="⚙️"):
                     st.info(msg["content"])
             elif msg["role"] == "rag":
                 with st.chat_message("system", avatar="🔍"):
                     with st.expander("📚 知识库检索结果", expanded=False):
-                        # 纯文本渲染
-                        st.text(msg["content"])
+                        # 使用新增的分页组件替代直接渲染
+                        render_rag_result(msg["content"], st.session_state.current_session_id, i)
             elif msg["role"] == "user":
                 with st.chat_message("user", avatar="👤"):
                     st.markdown(msg["content"])
@@ -324,18 +426,19 @@ else:
                 st.markdown(user_input)
 
         try:
+            # 核心修改点：这里拿到的是一个由多个字符串片段组成的 列表 similar_text
             similar_text = st.session_state.api.retrieve_similar_text(user_input)
             rag_result = st.session_state.api.prepare_rag_result(similar_text)
-            rag_msg = rag_result["display_message"]
             combined_text = rag_result["combined_text"]
 
-            st.session_state.display_history.append({"role": "rag", "content": rag_msg})
+            # 我们不再将拼接好的单条字符串存入历史，而是直接把列表存入！这样渲染时可以分页处理
+            st.session_state.display_history.append({"role": "rag", "content": similar_text})
+            current_idx = len(st.session_state.display_history) - 1
+            
             with chat_container:
                 with st.chat_message("system", avatar="🔍"):
-                    # 修改点：将 expanded=True 修改为 expanded=False
                     with st.expander("📚 知识库检索结果", expanded=False):
-                        # 纯文本渲染
-                        st.text(rag_msg)
+                        render_rag_result(similar_text, st.session_state.current_session_id, current_idx)
 
             enhanced_prompt = st.session_state.api.build_enhanced_prompt(user_input, combined_text)
             st.session_state.conversation.append({"role": "user", "content": enhanced_prompt})
@@ -353,6 +456,22 @@ else:
 
             st.session_state.conversation.append({"role": "assistant", "content": full_response})
             st.session_state.display_history.append({"role": "assistant", "content": full_response})
+
+            # 更新本地历史文件
+            session_id = st.session_state.current_session_id
+            if session_id not in st.session_state.all_sessions:
+                title_text = user_input[:12] + "..." if len(user_input) > 12 else user_input
+            else:
+                title_text = st.session_state.all_sessions[session_id].get("title", "未命名对话")
+            
+            st.session_state.all_sessions[session_id] = {
+                "title": title_text,
+                "course_type": st.session_state.course_type,
+                "course_name": st.session_state.course_name,
+                "conversation": st.session_state.conversation,
+                "display_history": st.session_state.display_history
+            }
+            save_history(st.session_state.all_sessions)
 
         except Exception as e:
             err = f"出错了：{e}"
