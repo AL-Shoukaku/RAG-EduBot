@@ -1,5 +1,5 @@
 # UI.py
-# 彻底修复课程选择+全屏纯色背景+检索折叠+本地历史记录+知识分页+联系作者+全量复制功能版
+# 彻底修复课程选择+全屏纯色背景+检索折叠+本地历史记录+知识分页+联系作者+全量复制功能版 + 单一全局原生滚动条
 import streamlit as st
 import json
 import os
@@ -26,11 +26,11 @@ def copy_to_clipboard_safe(text):
 # ================= 开发者自定义配置区域 =================
 # !!! 在这里填写你的 GitHub 仓库地址，例如 "https://github.com/yourusername/yourrepo"
 # !!! 如果不填写（保持为空字符串 ""），点击按钮会提示暂无
-GITHUB_REPO_URL = "" 
+GITHUB_REPO_URL = "https://github.com/AL-Shoukaku/BUAA-COOS-Assistant" 
 
 # !!! 在这里填写你的联系邮箱，例如 "your_email@example.com"
 # !!! 如果不填写（保持为空字符串 ""），点击按钮会提示暂无
-AUTHOR_EMAIL = ""
+AUTHOR_EMAIL = "24371454@buaa.edu.cn"
 
 
 # ================= 提前检查并处理 key.txt =================
@@ -140,15 +140,12 @@ def load_custom_css():
     }
     .stButton>button[type="primary"] { background: linear-gradient(135deg, rgba(102,126,234,0.8), rgba(118,75,162,0.8)); border: none; }
 
-    /* 聊天气泡 - 玻璃态 */
+    /* 聊天气泡 - 玻璃态 (移除容器样式，直接让气泡浮在页面上，更原生更清爽) */
     .stChatMessage {
         border-radius: 16px; padding: 12px 16px; margin-bottom: 10px; backdrop-filter: blur(10px);
         background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
-    [data-testid="stVerticalBlock"] > [style*="height: 900px"] {
-        border-radius: 20px; background: rgba(255,255,255,0.1); backdrop-filter: blur(15px);
-        border: 1px solid rgba(255,255,255,0.8); box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-    }
+    
     .stChatInput>div>div>input {
         border-radius: 60px; border: 1px solid rgba(255,255,255,0.3); padding: 0px 10px;
         background: rgba(255,255,255,0.2); backdrop-filter: blur(10px); color: white !important;
@@ -172,19 +169,19 @@ if not current_api_key:
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.warning("⚠️ 首次运行或尚未检测到 API Key，请先完成配置。")
-        st.info("系统需要有效的 API Key 才能调用大模型接口。您在此填写的 Key 将被安全地自动保存在本地同目录下的 `key.txt` 文件中。")
+        st.warning("⚠️ 首次运行或尚未检测到质谱 API Key，请先完成配置。")
+        st.info("系统需要有效的质谱 API Key 才能调用大模型接口。您在此填写的 Key 将被安全地自动保存在本地同目录下的 `key.txt` 文件中。")
         
-        new_key = st.text_input("🔑 请输入您的 API Key", type="password", placeholder="例如: 8a9bxxxx.xxxx")
+        new_key = st.text_input("🔑 请输入您的质谱 API Key", type="password", placeholder="例如: 8a9bxxxx.xxxx")
         
         if st.button("🚀 保存并进入系统", type="primary", use_container_width=True):
             if new_key.strip():
                 save_api_key(new_key)
-                st.success("🎉 API Key 已成功保存！系统正在启动...")
+                st.success("🎉 质谱 API Key 已成功保存！系统正在启动...")
                 time.sleep(1)
                 st.rerun()
             else:
-                st.error("API Key 不能为空！")
+                st.error("质谱 API Key 不能为空！")
     st.stop()
 
 
@@ -323,7 +320,6 @@ with st.sidebar:
         st.divider()
         st.markdown("**关于系统**")
         
-        # 修改点：将原先的两列布局改为直接上下独立放置按钮
         if GITHUB_REPO_URL:
             st.link_button("🐙 GitHub 仓库", url=GITHUB_REPO_URL, use_container_width=True)
         else:
@@ -427,7 +423,9 @@ else:
 
     st.divider()
 
-    chat_container = st.container(height=900, border=True)
+    # 直接使用无固定高度的空白容器，由 Streamlit 原生接管页面滚动
+    chat_container = st.container()
+    
     with chat_container:
         # 遍历历史记录进行渲染
         for i, msg in enumerate(st.session_state.display_history):
@@ -468,7 +466,7 @@ else:
         # 将用户问题存入历史
         st.session_state.display_history.append({"role": "user", "content": user_input})
         
-        # 临时绘制在前端进行过渡显示（等最终 rerun 重新刷新带复制按钮的版本）
+        # 临时绘制在前端进行过渡显示
         with chat_container:
             with st.chat_message("user", avatar="👤"):
                 st.markdown(user_input)
@@ -523,7 +521,7 @@ else:
             }
             save_history(st.session_state.all_sessions)
             
-            # 4. 强制刷新页面（为了让刚刚生成的内容附加上复制按钮等组件状态）
+            # 4. 强制刷新页面
             st.rerun()
 
         except Exception as e:
